@@ -127,15 +127,26 @@ async function saatTerbaca(teks) {
 
 $("btnMulai").addEventListener("click", async () => {
   if (!$("kode").value) { tampil("error", "Kode akses kosong", "Isi kode akses dulu."); return; }
+  // Tampilkan area kamera DULU supaya ukurannya terbaca saat kamera dinyalakan
+  $("kodeBox").classList.add("hidden");
+  $("scanBox").classList.remove("hidden");
+  tampil("", "Menyalakan kamera...", "");
   try {
     await scanner.start(
       { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 240, height: 240 } },
+      {
+        fps: 10,
+        qrbox: (w, h) => {
+          const sisi = Math.floor(Math.min(w, h) * 0.7);
+          return { width: sisi, height: sisi };
+        }
+      },
       saatTerbaca
     );
-    $("kodeBox").classList.add("hidden");
-    $("scanBox").classList.remove("hidden");
+    tampil("", "Kamera aktif", "Arahkan ke QR Code kartu pelajar.");
   } catch (err) {
+    $("scanBox").classList.add("hidden");
+    $("kodeBox").classList.remove("hidden");
     tampil("error", "Kamera tidak bisa dibuka", "Izinkan akses kamera di browser, lalu coba lagi. Detail: " + err);
   }
 });
