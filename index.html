@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan Presensi</title>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f6fa; --card: #ffffff; --ink: #1c1b3a; --muted: #6b6a85;
+    --brand: #4338ca; --line: #dcdcec;
+    --ok-bg: #dcfce7; --ok-ink: #14532d;
+    --warn-bg: #fef3c7; --warn-ink: #78350f;
+    --err-bg: #fee2e2; --err-ink: #7f1d1d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14132b; --card: #1e1d3d; --ink: #f0f0fa; --muted: #a3a2c2;
+      --brand: #8b83f5; --line: #34335c;
+      --ok-bg: #123524; --ok-ink: #bbf7d0;
+      --warn-bg: #3b2a0b; --warn-ink: #fde68a;
+      --err-bg: #3f1414; --err-ink: #fecaca;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px; display: flex; justify-content: center;
+  }
+  main { width: 100%; max-width: 440px; }
+  h1 { font-size: 1.35rem; margin: 8px 0 2px; }
+  p.sub { margin: 0 0 16px; color: var(--muted); font-size: .95rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px; margin-bottom: 14px;
+  }
+  label { display: block; font-size: .9rem; margin-bottom: 6px; color: var(--muted); }
+  input {
+    width: 100%; padding: 12px; font-size: 1rem; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  }
+  button {
+    font-size: 1rem; font-weight: 600; padding: 12px 16px; border-radius: 8px;
+    border: 0; cursor: pointer; width: 100%; margin-top: 12px;
+    background: var(--brand); color: #fff;
+  }
+  button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+  #reader { width: 100%; border-radius: 8px; overflow: hidden; }
+  #result {
+    border-radius: 12px; padding: 16px; font-size: 1.05rem; line-height: 1.4;
+    background: var(--card); border: 1px solid var(--line); color: var(--muted);
+  }
+  #result.ok { background: var(--ok-bg); color: var(--ok-ink); border-color: transparent; }
+  #result.warning { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
+  #result.error { background: var(--err-bg); color: var(--err-ink); border-color: transparent; }
+  #result strong { display: block; font-size: 1.15rem; margin-bottom: 4px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Scan presensi siswa</h1>
+  <p class="sub">Arahkan kamera ke QR Code kartu pelajar.</p>
+
+  <section class="card" id="kodeBox">
+    <label for="kode">Kode akses guru</label>
+    <input id="kode" type="password" autocomplete="off" placeholder="Masukkan kode akses">
+    <button id="btnMulai">Mulai kamera</button>
+  </section>
+
+  <section class="card hidden" id="scanBox">
+    <div id="reader"></div>
+    <button class="secondary" id="btnStop">Hentikan kamera</button>
+  </section>
+
+  <div id="result">Menunggu QR Code di-scan.</div>
+</main>
+
+<script>
+// ====== GANTI BAGIAN INI ======
+const URL_API = "https://script.google.com/macros/s/AKfycbxMF3Jphr-ItlzH2dl27AGoxBNNgamUk38Tu6QqYVwX-3JQ89DTtQNkBuNCiB_bXF2k/exec";
+// ==============================
+
+const $ = (id) => document.getElementById(id);
+const scanner = new Html5Qrcode("reader");
+let sedangProses = false;
+
+function tampil(status, judul, isi) {
+  const el = $("result");
+  el.className = status;
+  el.innerHTML = "";
+  const s = document.createElement("strong");
+  s.textContent = judul;
+  el.appendChild(s);
+  if (isi) el.appendChild(document.createTextNode(isi));
+}
+
+async function kirim(nis) {
+  const res = await fetch(URL_API, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ nis: nis, kode: $("kode").value })
+  });
+  return res.json();
+}
+
+async function saatTerbaca(teks) {
+  if (sedangProses) return;
+  sedangProses = true;
+  tampil("", "Memproses...", teks);
+  try {
+    const d = await kirim(teks.trim());
+    if (d.status === "success") {
+      tampil("ok", "Berhasil", d.message + (d.jam ? " (" + d.jam + ")" : ""));
+    } else if (d.status === "warning") {
+      tampil("warning", "Sudah absen", d.message);
+    } else {
+      tampil("error", "Gagal", d.message || "Terjadi kesalahan.");
+    }
+  } catch (err) {
+    tampil("error", "Tidak terhubung", "Cek internet dan pastikan URL_API sudah benar.");
+  }
+  setTimeout(() => { sedangProses = false; }, 2500);
+}
+
+$("btnMulai").addEventListener("click", async () => {
+  if (!$("kode").value) { tampil("error", "Kode akses kosong", "Isi kode akses dulu."); return; }
+  try {
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 240, height: 240 } },
+      saatTerbaca
+    );
+    $("kodeBox").classList.add("hidden");
+    $("scanBox").classList.remove("hidden");
+  } catch (err) {
+    tampil("error", "Kamera tidak bisa dibuka", "Izinkan akses kamera di browser, lalu coba lagi. Detail: " + err);
+  }
+});
+
+$("btnStop").addEventListener("click", async () => {
+  try { await scanner.stop(); } catch (e) {}
+  $("scanBox").classList.add("hidden");
+  $("kodeBox").classList.remove("hidden");
+  tampil("", "Kamera dihentikan", "");
+});
+</script>
+</body>
+</html>
